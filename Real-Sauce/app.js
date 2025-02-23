@@ -22,6 +22,11 @@ let currPlayer = "W"
 app.set("view engine", "ejs")
 app.use(express.static(path.join(__dirname,"public")))
 
+io.on("connection",(userData)=>{ //userData is generally called "socket" 
+    console.log("connected")
+    
+})
+
 app.get("/",(req,res)=>{
     res.render(`index`,{title:"Chess Game"})
 })

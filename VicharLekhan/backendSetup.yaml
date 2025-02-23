@@ -1,6 +1,6 @@
 # SERVER JS CODE
 
-- Import: express, http, socket.io, chess.js +
+- index.js +
 
 - Create Express app instance
 - Initialize HTTP server with Express
