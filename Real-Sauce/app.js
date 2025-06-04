@@ -1,36 +1,71 @@
-const express = require("express")
-const http = require("http")
-const {Chess} = require("chess.js")
-const socket = require("socket.io")
-const path = require("path")
-const { title } = require("process")
-// got the modeuls and Class(chess wali)
+const express = require("express");
+const http = require("http");
+const { Chess } = require("chess.js");
+const socket = require("socket.io");
+const path = require("path");
 
-const app = express() // the xpress app managing the routing
+const app = express();
+const server = http.createServer(app);
+const io = socket(server);
 
-//*
-const server = http.createServer(app) // a http server having express app in it managing the routing (did for socket)
-const io = socket(server)
+const games = new Map();
+const waitingPlayers = [];
 
-const chess = new Chess()  
-// having all the chess rules from chess.js
+app.set("view engine", "ejs");
+app.use(express.static(path.join(__dirname, "public")));
 
-let players = {}
-let currPlayer = "W"
-// set the vars
+io.on("connection", (socket) => {
+    console.log("Player connected:", socket.id);
 
-app.set("view engine", "ejs")
-app.use(express.static(path.join(__dirname,"public")))
+    socket.on('joinGame', () => {
+        if (waitingPlayers.length > 0) {
+            const opponent = waitingPlayers.pop();
+            const gameId = `${socket.id}-${opponent}`;
+            
+            games.set(gameId, {
+                white: opponent,
+                black: socket.id,
+                game: new Chess()
+            });
 
-io.on("connection",(userData)=>{ //userData is generally called "socket" 
-    console.log("connected")
-    
-})
+            io.to(opponent).emit('playerColor', 'w');
+            socket.emit('playerColor', 'b');
+        } else {
+            waitingPlayers.push(socket.id);
+        }
+    });
 
-app.get("/",(req,res)=>{
-    res.render(`index`,{title:"Chess Game"})
-})
+    socket.on('move', (data) => {
+        const game = Array.from(games.values()).find(g => 
+            g.white === socket.id || g.black === socket.id
+        );
 
-app.listen(3000,()=>{
-    console.log('http://localhost:3000')
-})
+        if (game) {
+            const opponent = game.white === socket.id ? game.black : game.white;
+            io.to(opponent).emit('gameMove', data);
+        }
+    });
+
+    socket.on('disconnect', () => {
+        const index = waitingPlayers.indexOf(socket.id);
+        if (index > -1) {
+            waitingPlayers.splice(index, 1);
+        }
+        
+        games.forEach((game, gameId) => {
+            if (game.white === socket.id || game.black === socket.id) {
+                const opponent = game.white === socket.id ? game.black : game.white;
+                io.to(opponent).emit('gameOver', 'Opponent disconnected');
+                games.delete(gameId);
+            }
+        });
+    });
+});
+
+app.get("/", (req, res) => {
+    res.render('index', { title: "CHESSMASTER" });
+});
+
+server.listen(3000, () => {
+    console.log('Server running on http://localhost:3000');
+});
