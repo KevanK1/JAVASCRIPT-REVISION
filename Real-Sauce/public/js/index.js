@@ -1,46 +1,97 @@
 const socket = io();
 let board = null;
-let game = null;
+let game = new Chess();
 let playerColor = 'w';
+let gameId = null;
+let isViewer = false;
 
-// Initialize the game when Play button is clicked
 document.getElementById('playButton').addEventListener('click', () => {
     document.querySelector('.landing-page').classList.add('hidden');
-    document.querySelector('.game-container').classList.remove('hidden');
-    initializeGame();
+    document.querySelector('.mode-selection').classList.remove('hidden');
 });
 
-function initializeGame() {
-    // Initialize the chessboard
+document.getElementById('playerMode').addEventListener('click', () => {
+    document.querySelector('.mode-selection').classList.add('hidden');
+    document.querySelector('.game-container').classList.remove('hidden');
+    initializeGame('player');
+});
+
+document.getElementById('viewerMode').addEventListener('click', () => {
+    document.querySelector('.mode-selection').classList.add('hidden');
+    document.querySelector('.game-list').classList.remove('hidden');
+    initializeGame('viewer');
+});
+
+function initializeGame(mode) {
     const config = {
-        draggable: true,
+        draggable: mode === 'player',
         position: 'start',
         onDragStart: onDragStart,
         onDrop: onDrop,
         onSnapEnd: onSnapEnd
     };
     board = Chessboard('board', config);
+    
+    socket.emit('joinGame', mode);
 
-    // Socket events
-    socket.emit('joinGame');
-
-    socket.on('playerColor', (color) => {
-        playerColor = color;
-        updateStatus();
-    });
-
-    socket.on('gameMove', (move) => {
-        board.position(move.position);
-        updateStatus();
-    });
-
-    socket.on('gameOver', (result) => {
-        document.getElementById('game-status').textContent = `Game Over: ${result}`;
-    });
+    if (mode === 'viewer') {
+        isViewer = true;
+    }
 }
 
+socket.on('waiting', () => {
+    document.getElementById('game-status').textContent = 'Waiting for opponent...';
+});
+
+socket.on('activeGamesUpdate', (games) => {
+    if (isViewer) {
+        const gameList = document.getElementById('gamesList');
+        gameList.innerHTML = '';
+        games.forEach(game => {
+            const button = document.createElement('button');
+            button.textContent = `Watch Game ${game}`;
+            button.className = 'game-button';
+            button.onclick = () => {
+                socket.emit('joinAsViewer', game);
+                document.querySelector('.game-list').classList.add('hidden');
+                document.querySelector('.game-container').classList.remove('hidden');
+            };
+            gameList.appendChild(button);
+        });
+    }
+});
+
+socket.on('gameStart', (data) => {
+    playerColor = data.color;
+    gameId = data.gameId;
+    game = new Chess();
+    board.orientation(playerColor === 'w' ? 'white' : 'black');
+    updateStatus();
+});
+
+socket.on('viewerJoined', (data) => {
+    gameId = data.gameId;
+    game.load(data.position);
+    board.position(data.position);
+    document.getElementById('game-status').textContent = 'Viewing live game';
+});
+
+socket.on('gameMove', (data) => {
+    game.load(data.position);
+    board.position(data.position);
+    updateStatus();
+});
+
+socket.on('gameOver', (result) => {
+    document.getElementById('game-status').textContent = `Game Over: ${result}`;
+    if (!isViewer) {
+        // Disable dragging for players when game is over
+        board.draggable = false;
+    }
+});
+
 function onDragStart(source, piece) {
-    // Only allow the current player to move their pieces
+    if (isViewer) return false;
     if ((game.turn() === 'w' && piece.search(/^b/) !== -1) ||
         (game.turn() === 'b' && piece.search(/^w/) !== -1) ||
         game.turn() !== playerColor) {
@@ -49,6 +100,8 @@ function onDragStart(source, piece) {
 }
 
 function onDrop(source, target) {
+    if (isViewer) return 'snapback';
+    
     const move = {
         from: source,
         to: target,
@@ -59,8 +112,8 @@ function onDrop(source, target) {
     if (moveResult === null) return 'snapback';
 
     socket.emit('move', {
-        move: move,
-        position: game.fen()
+        gameId,
+        move: move
     });
 
     updateStatus();
@@ -72,13 +125,13 @@ function onSnapEnd() {
 
 function updateStatus() {
     let status = '';
-    if (game.in_checkmate()) {
+    if (game.isCheckmate()) {
         status = 'Game Over: Checkmate!';
-    } else if (game.in_draw()) {
+    } else if (game.isDraw()) {
         status = 'Game Over: Draw!';
     } else {
         status = `${game.turn() === 'w' ? 'White' : 'Black'} to move`;
-        if (game.in_check()) {
+        if (game.isCheck()) {
             status += ' (CHECK)';
         }
     }

@@ -10,39 +10,85 @@ const io = socket(server);
 
 const games = new Map();
 const waitingPlayers = [];
+const activeGames = new Map(); // Stores active game rooms
 
 app.set("view engine", "ejs");
 app.use(express.static(path.join(__dirname, "public")));
 
 io.on("connection", (socket) => {
-    console.log("Player connected:", socket.id);
+    console.log("User connected:", socket.id);
 
-    socket.on('joinGame', () => {
-        if (waitingPlayers.length > 0) {
-            const opponent = waitingPlayers.pop();
-            const gameId = `${socket.id}-${opponent}`;
-            
-            games.set(gameId, {
-                white: opponent,
-                black: socket.id,
-                game: new Chess()
-            });
+    socket.on('joinGame', (mode) => {
+        if (mode === 'player') {
+            if (waitingPlayers.length > 0) {
+                const opponent = waitingPlayers.pop();
+                const gameId = `game-${Date.now()}`;
+                
+                const gameState = {
+                    white: opponent,
+                    black: socket.id,
+                    game: new Chess(),
+                    viewers: new Set(),
+                    gameId
+                };
+                
+                games.set(gameId, gameState);
+                activeGames.set(gameId, gameState);
 
-            io.to(opponent).emit('playerColor', 'w');
-            socket.emit('playerColor', 'b');
-        } else {
-            waitingPlayers.push(socket.id);
+                // Join both players to the game room
+                socket.join(gameId);
+                io.sockets.sockets.get(opponent)?.join(gameId);
+
+                io.to(opponent).emit('gameStart', { color: 'w', gameId });
+                socket.emit('gameStart', { color: 'b', gameId });
+                
+                // Broadcast new game available to viewers
+                io.emit('activeGamesUpdate', Array.from(activeGames.keys()));
+            } else {
+                waitingPlayers.push(socket.id);
+                socket.emit('waiting');
+            }
+        } else if (mode === 'viewer' && activeGames.size > 0) {
+            // Send list of active games to viewer
+            socket.emit('activeGamesUpdate', Array.from(activeGames.keys()));
         }
     });
 
-    socket.on('move', (data) => {
-        const game = Array.from(games.values()).find(g => 
-            g.white === socket.id || g.black === socket.id
-        );
-
+    socket.on('joinAsViewer', (gameId) => {
+        const game = activeGames.get(gameId);
         if (game) {
-            const opponent = game.white === socket.id ? game.black : game.white;
-            io.to(opponent).emit('gameMove', data);
+            socket.join(gameId);
+            game.viewers.add(socket.id);
+            socket.emit('viewerJoined', {
+                gameId,
+                position: game.game.fen()
+            });
+        }
+    });
+
+    socket.on('move', ({ gameId, move }) => {
+        const game = games.get(gameId);
+        if (game) {
+            const moveResult = game.game.move(move);
+            if (moveResult) {
+                const position = game.game.fen();
+                io.to(gameId).emit('gameMove', {
+                    position,
+                    move,
+                    turn: game.game.turn()
+                });
+
+                if (game.game.isGameOver()) {
+                    let result = '';
+                    if (game.game.isCheckmate()) result = 'Checkmate!';
+                    else if (game.game.isDraw()) result = 'Draw!';
+                    else if (game.game.isStalemate()) result = 'Stalemate!';
+                    
+                    io.to(gameId).emit('gameOver', result);
+                    activeGames.delete(gameId);
+                    io.emit('activeGamesUpdate', Array.from(activeGames.keys()));
+                }
+            }
         }
     });
 
@@ -54,9 +100,12 @@ io.on("connection", (socket) => {
         
         games.forEach((game, gameId) => {
             if (game.white === socket.id || game.black === socket.id) {
-                const opponent = game.white === socket.id ? game.black : game.white;
-                io.to(opponent).emit('gameOver', 'Opponent disconnected');
+                io.to(gameId).emit('gameOver', 'Opponent disconnected');
+                activeGames.delete(gameId);
                 games.delete(gameId);
+                io.emit('activeGamesUpdate', Array.from(activeGames.keys()));
+            } else if (game.viewers.has(socket.id)) {
+                game.viewers.delete(socket.id);
             }
         });
     });

@@ -12,7 +12,18 @@
     <div class="landing-page">
         <h1 class="title">CHESSMASTER</h1>
         <p class="subtitle">Experience the Royal Game</p>
-        <button id="playButton" class="play-button">Play Now</button>
+        <button id="playButton" class="play-button">Enter Game</button>
+    </div>
+
+    <div class="mode-selection hidden">
+        <h2 class="mode-title">Select Mode</h2>
+        <button id="playerMode" class="mode-button">Play Game</button>
+        <button id="viewerMode" class="mode-button">Watch Games</button>
+    </div>
+
+    <div class="game-list hidden">
+        <h2 class="list-title">Available Games</h2>
+        <div id="gamesList" class="games-list"></div>
     </div>
 
     <div class="game-container hidden">
@@ -26,6 +37,7 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
     <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
     <script src="/js/index.js"></script>
 </body>
 </html>
