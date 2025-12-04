@@ -3,12 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title><%= title %></title>
+    <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-    <h1><%= title %></h1>
+    <div class="container">
+        <h1>♔ <%= title %> ♚</h1>
+        
+        <div class="game-info">
+            <div class="player-role" id="playerRole">Connecting...</div>
+            <div class="turn-indicator" id="turnIndicator">Waiting for players...</div>
+        </div>
+        
+        <div class="status-message" id="statusMessage" style="display: none;"></div>
+        
+        <div id="chessboard"></div>
+    </div>
 
+    <!-- Chess.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    
+    <!-- Socket.io Client -->
     <script src="https://cdn.socket.io/4.8.1/socket.io.min.js" integrity="sha384-mkQ3/7FUtcGyoppY6bz/PORYoGqOl7/aSUMn2ymDOJcapfS6PHqxhRTMh1RR0Q6+" crossorigin="anonymous"></script>
+    
+    <!-- Our Chess Game Logic -->
     <script src="/js/index.js"></script>
 </body>
 </html>
